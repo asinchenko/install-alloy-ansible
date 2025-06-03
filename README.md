@@ -12,6 +12,7 @@
 - и Alloy сразу начнёт собирать метрики или логи.
 
 ## 📁 Структура роли
+```
 ansible-scripts/
 └── roles/
     └── install-alloy/
@@ -37,7 +38,7 @@ ansible-scripts/
         └── vars/
             ├── Debian.yml
             └── main.yml
-
+```
 ## 🔧 Поддерживаемые конфигурации Alloy
 
 Примеры включаемых модулей:
