@@ -1,0 +1,24 @@
+prometheus.exporter.blackbox "blackbox" {
+  config = "{ modules: { http_2xx: { prober: http, timeout: 5s } } }"
+
+  target {
+    name    = "localhost"
+    address = "http://localhost:8080"
+    module  = "http_2xx"
+    labels = {
+      "env" = "localhost",
+    }
+  }
+}
+
+prometheus.scrape "blackbox" {
+  targets    = prometheus.exporter.blackbox.blackbox.targets
+  forward_to = [prometheus.remote_write.blackbox.receiver]
+}
+
+prometheus.remote_write "blackbox" {
+  endpoint {
+    url = "http://PROMETHEUS:PORT/api/v1/write"
+  }
+}
+

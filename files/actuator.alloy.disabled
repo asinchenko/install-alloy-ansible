@@ -1,0 +1,23 @@
+discovery.relabel "metrics_integrations_integrations_spring_boot" {
+    targets = [
+        { __address__ = "localhost:8630", instsance = "realtime-indexes_client_ITSS" },
+        { __address__ = "localhost:8631", instance = "realtime-indexes_client_ITSW" },
+    ]
+
+
+}
+prometheus.scrape "metrics_integrations_integrations_spring_boot" {
+        targets      = discovery.relabel.metrics_integrations_integrations_spring_boot.output
+        forward_to   = [prometheus.remote_write.metrics_service.receiver]
+        job_name     = "integrations/spring-boot"
+        metrics_path = "/actuator/prometheus"
+        scrape_interval = "10s"
+}
+
+prometheus.remote_write "metrics_service" {
+  endpoint {
+    url = "http://prometheus.test.index.sup.itsx/api/v1/write"
+
+  }
+}
+

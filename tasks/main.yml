@@ -1,0 +1,107 @@
+---
+- name: Obtain the latest version from the GitHub repo
+  when: alloy_version == "latest"
+  block:
+    - name: Scrape Github API endpoint to obtain latest Alloy version
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/grafana/alloy/releases/latest"
+        method: GET
+        body_format: json
+      become: false
+      delegate_to: localhost
+      run_once: true
+      check_mode: false
+      register: __github_latest_version
+
+    - name: Latest available Alloy version
+      ansible.builtin.set_fact:
+        alloy_version: "{{ __github_latest_version.json.tag_name | regex_replace('^v?(\\d+\\.\\d+\\.\\d+)$', '\\1') }}"
+
+- name: Verify current deployed version
+  block:
+    - name: Check if Alloy binary is present
+      ansible.builtin.stat:
+        path: "/usr/bin/alloy"
+      register: __already_deployed
+
+    - name: Obtain current deployed Alloy version
+      ansible.builtin.command:
+        cmd: "/usr/bin/alloy --version"
+      changed_when: false
+      register: __current_deployed_version
+      when: __already_deployed.stat.exists | bool
+
+- name: Show latest version of alloy 
+  debug:
+    msg: "{{ alloy_download_url_deb }}"
+
+- name: Include Debian/Ubuntu setup
+  ansible.builtin.apt:
+    deb: "{{ alloy_download_url_deb }}"
+    state: present
+  notify: restart alloy
+  when: (__current_deployed_version.stdout is not defined or alloy_version not in __current_deployed_version.stdout) 
+        and ansible_facts['os_family'] == 'Debian'
+  ignore_errors: true
+  register: is_installed_from_internet
+
+- name: Debug install result
+  debug:
+    var: is_installed_from_internet
+
+- name: Install locally if no internet
+  block: 
+    - name: Copy binary locally 
+      ansible.builtin.copy:
+        src: "files/alloy-1.7.5-1.amd64.deb"
+        dest: "/tmp/alloy-1.7.5-1.amd64.deb"
+
+    - name: Install from copied binary 
+      ansible.builtin.apt:
+        deb: "/tmp/alloy-1.7.5-1.amd64.deb"
+        state: present
+      notify: restart alloy
+  when: is_installed_from_internet is defined and is_installed_from_internet is not skipped and is_installed_from_internet.failed
+
+- name: Copy config files
+  block:
+  - name: Copy all Alloy configuration files
+    ansible.builtin.copy:
+      src: "{{ item }}"
+      dest: "/etc/alloy/{{ item | basename }}"
+      owner: "root"
+      group: "root"
+      mode: "0644"
+    with_fileglob:
+    - "{{ role_path }}/files/*.disabled" 
+  
+  - name: Copy all Alloy service file
+    ansible.builtin.copy:
+      src: "files/service/alloy.service"
+      dest: "/etc/systemd/system/alloy.service"
+      owner: "root"
+      group: "root"
+      mode: "0644"
+  notify: restart alloy
+
+- name: Add the Alloy system user to additional group
+  ansible.builtin.user:
+    name: "alloy"
+    groups: "{{ item }}"
+    system: true
+    append: true
+    create_home: false
+    state: present
+  loop:
+    - alloy
+    - docker
+  ignore_errors: yes
+
+- name: Flush handlers after deployment
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure that Alloy is started
+  ansible.builtin.systemd:
+    name: alloy.service
+    state: started
+  when: not ansible_check_mode

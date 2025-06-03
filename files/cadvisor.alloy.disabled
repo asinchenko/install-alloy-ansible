@@ -1,0 +1,18 @@
+prometheus.exporter.cadvisor "cadvisor" {
+  docker_host = "unix:///var/run/docker.sock"
+
+  storage_duration = "5m"
+}
+
+// Configure a prometheus.scrape component to collect cadvisor metrics.
+prometheus.scrape "scraper" {
+  targets    = prometheus.exporter.cadvisor.cadvisor.targets
+  forward_to = [ prometheus.remote_write.prometheus.receiver ]
+}
+
+prometheus.remote_write "prometheus" {
+  endpoint {
+    url = "http://PROMETHEUS:PORT/api/v1/write"
+  }
+}
+
